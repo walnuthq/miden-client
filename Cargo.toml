@@ -54,6 +54,9 @@ miden-remote-prover-client = { branch = "next", default-features = false, featur
   "tx-prover",
 ], git = "https://github.com/0xMiden/miden-node" }
 
+# Miden debug dependencies
+miden-debug = { default-features = false, features = ["dap", "std"], path = "../miden-debug" }
+
 # External dependencies
 anyhow      = { default-features = false, version = "1.0" }
 async-trait = { version = "0.1" }

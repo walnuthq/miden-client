@@ -33,6 +33,7 @@ std = [
   "tonic/tls-ring",
   "tonic/transport",
 ]
+dap = ["dep:miden-debug"]
 testing = ["dep:miden-testing", "dep:uuid", "miden-protocol/testing", "miden-standards/testing", "miden-tx/testing"]
 tonic = []
 
@@ -42,6 +43,7 @@ miden-mast-package         = { default-features = false, version = "0.21" }
 miden-protocol             = { workspace = true }
 miden-remote-prover-client = { default-features = false, features = ["tx-prover"], workspace = true }
 miden-standards            = { workspace = true }
+miden-debug                = { optional = true, workspace = true }
 miden-testing              = { optional = true, workspace = true }
 miden-tx                   = { workspace = true }
 
