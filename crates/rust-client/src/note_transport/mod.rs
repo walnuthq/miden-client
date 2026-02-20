@@ -12,7 +12,8 @@ use miden_protocol::address::Address;
 use miden_protocol::note::{Note, NoteDetails, NoteFile, NoteHeader, NoteTag};
 use miden_protocol::utils::Serializable;
 use miden_tx::auth::TransactionAuthenticator;
-use miden_tx::utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, SliceReader};
+use miden_protocol::crypto::utils::SliceReader;
+use miden_tx::utils::{ByteReader, ByteWriter, Deserializable, DeserializationError};
 
 pub use self::errors::NoteTransportError;
 use crate::{Client, ClientError};

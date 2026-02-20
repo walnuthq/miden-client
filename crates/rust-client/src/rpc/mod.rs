@@ -50,6 +50,7 @@ use domain::account::{AccountProof, FetchedAccount};
 use domain::note::{FetchedNote, NoteSyncInfo};
 use domain::nullifier::NullifierUpdate;
 use domain::sync::StateSyncInfo;
+use miden_protocol::PrimeField64;
 use miden_protocol::Word;
 use miden_protocol::account::{Account, AccountCode, AccountHeader, AccountId};
 use miden_protocol::address::NetworkId;
@@ -301,7 +302,7 @@ pub trait NodeRpcClient: Send + Sync {
             if let FetchedAccount::Public(account, _) = response {
                 let account = *account;
                 // We should only return an account if it's newer, otherwise we ignore it
-                if account.nonce().as_int() > local_account.nonce().as_int() {
+                if account.nonce().as_canonical_u64() > local_account.nonce().as_canonical_u64() {
                     public_accounts.push(account);
                 }
             }

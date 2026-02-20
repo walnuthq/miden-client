@@ -135,7 +135,8 @@ mod test_utils;
 
 pub mod errors;
 
-pub use miden_protocol::utils::{Deserializable, Serializable, SliceReader};
+pub use miden_protocol::crypto::utils::SliceReader;
+pub use miden_protocol::utils::{Deserializable, Serializable};
 
 // RE-EXPORTS
 // ================================================================================================
@@ -210,9 +211,9 @@ pub mod block {
 /// the `miden_standards` crate.
 pub mod crypto {
     pub mod rpo_falcon512 {
-        pub use miden_protocol::crypto::dsa::falcon512_rpo::{PublicKey, SecretKey, Signature};
+        pub use miden_protocol::crypto::dsa::falcon512_poseidon2::{PublicKey, SecretKey, Signature};
     }
-    pub use miden_protocol::crypto::hash::blake::{Blake3_160, Blake3Digest};
+    pub use miden_protocol::crypto::hash::blake::{Blake3_192, Blake3Digest};
     pub use miden_protocol::crypto::hash::rpo::Rpo256;
     pub use miden_protocol::crypto::merkle::mmr::{
         Forest,
@@ -269,11 +270,11 @@ pub use miden_protocol::{
     MIN_TX_EXECUTION_CYCLES,
     ONE,
     PrettyPrint,
-    StarkField,
+    PrimeField64,
     Word,
     ZERO,
 };
-pub use miden_remote_prover_client::RemoteTransactionProver;
+pub use miden_remote_prover_client::remote_prover::tx_prover::RemoteTransactionProver;
 pub use miden_tx::ExecutionOptions;
 
 /// Provides test utilities for working with accounts and account IDs

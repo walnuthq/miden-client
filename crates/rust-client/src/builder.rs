@@ -462,6 +462,7 @@ where
             exec_options: ExecutionOptions::new(
                 Some(MAX_TX_EXECUTION_CYCLES),
                 MIN_TX_EXECUTION_CYCLES,
+                0,
                 false,
                 self.in_debug_mode.into(),
             )

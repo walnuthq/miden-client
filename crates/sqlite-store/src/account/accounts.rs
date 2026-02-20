@@ -33,6 +33,7 @@ use miden_client::store::{
 use miden_client::sync::NoteTagRecord;
 use miden_client::utils::Serializable;
 use miden_client::{AccountError, Word};
+use miden_protocol::PrimeField64;
 use miden_protocol::account::{AccountStorageHeader, StorageMapWitness, StorageSlotHeader};
 use miden_protocol::asset::{AssetVaultKey, PartialVault};
 use miden_protocol::crypto::merkle::MerkleError;
@@ -807,7 +808,7 @@ impl SqliteStore {
         let code_commitment = account.code_commitment().to_string();
         let storage_commitment = account.storage_commitment().to_string();
         let vault_root = account.vault_root().to_string();
-        let nonce = u64_to_value(account.nonce().as_int());
+        let nonce = u64_to_value(account.nonce().as_canonical_u64());
         let commitment = account.commitment().to_string();
 
         let account_seed = account_seed.map(|seed| seed.to_bytes());

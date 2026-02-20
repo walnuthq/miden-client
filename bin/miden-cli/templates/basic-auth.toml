@@ -5,6 +5,6 @@ supported-types = ["RegularAccountUpdatableCode", "RegularAccountImmutableCode",
 
 [storage]
 [[storage.slots]]
-name = "miden::standards::auth::rpo_falcon512::public_key"
+name = "miden::standards::auth::falcon512_poseidon2::public_key"
 description = "Falcon public key"
-type = "miden::standards::auth::falcon512_rpo::pub_key"
+type = "miden::standards::auth::falcon512_poseidon2::pub_key"

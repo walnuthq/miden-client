@@ -13,7 +13,7 @@ use miden_protocol::address::NetworkId;
 use miden_protocol::block::account_tree::AccountWitness;
 use miden_protocol::block::{BlockHeader, BlockNumber, ProvenBlock};
 use miden_protocol::crypto::merkle::MerklePath;
-use miden_protocol::crypto::merkle::mmr::{Forest, MmrProof};
+use miden_protocol::crypto::merkle::mmr::{Forest, MmrPath, MmrProof};
 use miden_protocol::crypto::merkle::smt::SmtProof;
 use miden_protocol::note::{NoteId, NoteScript, NoteTag, Nullifier};
 use miden_protocol::transaction::{ProvenTransaction, TransactionInputs};
@@ -454,11 +454,12 @@ impl NodeRpcClient for GrpcClient {
                 .ok_or(RpcError::ExpectedDataMissing("MmrPath".into()))?
                 .try_into()?;
 
-            Some(MmrProof {
-                forest: Forest::new(usize::try_from(forest).expect("u64 should fit in usize")),
-                position: block_header.block_num().as_usize(),
+            let mmr_path = MmrPath::new(
+                Forest::new(usize::try_from(forest).expect("u64 should fit in usize")),
+                block_header.block_num().as_usize(),
                 merkle_path,
-            })
+            );
+            Some(MmrProof::new(mmr_path, block_header.commitment()))
         } else {
             None
         };

@@ -12,6 +12,7 @@ use miden_client::asset::Asset;
 use miden_client::rpc::{GrpcClient, NodeRpcClient};
 use miden_client::transaction::{AccountComponentInterface, AccountInterface};
 use miden_client::{Client, PrettyPrint, ZERO};
+use miden_client::PrimeField64;
 
 use crate::config::CliConfig;
 use crate::errors::CliError;
@@ -115,7 +116,7 @@ async fn list_accounts<AUTH>(client: Client<AUTH>) -> Result<(), CliError> {
             acc.id().to_hex(),
             account_type_display_name(&acc.id())?,
             acc.id().storage_mode().to_string(),
-            acc.nonce().as_int().to_string(),
+            acc.nonce().as_canonical_u64().to_string(),
             status,
         ]);
     }
@@ -263,7 +264,7 @@ async fn print_summary_table<AUTH>(
         Cell::new("Storage Root"),
         Cell::new(account.storage().to_commitment().to_string()),
     ]);
-    table.add_row(vec![Cell::new("Nonce"), Cell::new(account.nonce().as_int().to_string())]);
+    table.add_row(vec![Cell::new("Nonce"), Cell::new(account.nonce().as_canonical_u64().to_string())]);
 
     println!("{table}\n");
     Ok(())
@@ -323,10 +324,7 @@ async fn account_bech_32<AUTH>(
         .any(|c| matches!(c, AccountComponentInterface::BasicWallet))
     {
         address = address
-            .with_routing_parameters(RoutingParameters::new(AddressInterface::BasicWallet))
-            .map_err(|err| {
-                CliError::Address(err, "Failed to set routing parameters".to_string())
-            })?;
+            .with_routing_parameters(RoutingParameters::new(AddressInterface::BasicWallet));
     }
 
     let encoded = address.encode(cli_config.rpc.endpoint.0.to_network_id());

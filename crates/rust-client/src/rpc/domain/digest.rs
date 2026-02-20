@@ -3,7 +3,7 @@ use core::fmt::{self, Debug, Display, Formatter};
 
 use hex::ToHex;
 use miden_protocol::note::NoteId;
-use miden_protocol::{Felt, StarkField, Word};
+use miden_protocol::{Felt, PrimeField64, Word};
 
 use crate::rpc::errors::RpcConversionError;
 use crate::rpc::generated as proto;
@@ -61,10 +61,10 @@ impl ToHex for proto::primitives::Digest {
 impl From<Word> for proto::primitives::Digest {
     fn from(value: Word) -> Self {
         Self {
-            d0: value[0].as_int(),
-            d1: value[1].as_int(),
-            d2: value[2].as_int(),
-            d3: value[3].as_int(),
+            d0: value[0].as_canonical_u64(),
+            d1: value[1].as_canonical_u64(),
+            d2: value[2].as_canonical_u64(),
+            d3: value[3].as_canonical_u64(),
         }
     }
 }
@@ -96,7 +96,7 @@ impl TryFrom<proto::primitives::Digest> for [Felt; 4] {
     fn try_from(value: proto::primitives::Digest) -> Result<Self, Self::Error> {
         if [value.d0, value.d1, value.d2, value.d3]
             .iter()
-            .all(|v| *v < <Felt as StarkField>::MODULUS)
+            .all(|v| *v < Felt::ORDER_U64)
         {
             Ok([
                 Felt::new(value.d0),

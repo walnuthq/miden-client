@@ -94,10 +94,13 @@ miden-utils-sync = { path = "../miden-vm/crates/utils-sync" }
 miden-verifier = { path = "../miden-vm/verifier" }
 
 [patch."https://github.com/0xMiden/miden-base.git"]
+miden-agglayer = { path = "../miden-base/crates/miden-agglayer" }
+miden-block-prover = { path = "../miden-base/crates/miden-block-prover" }
 miden-protocol = { path = "../miden-base/crates/miden-protocol" }
 miden-standards = { path = "../miden-base/crates/miden-standards" }
 miden-testing = { path = "../miden-base/crates/miden-testing" }
 miden-tx = { path = "../miden-base/crates/miden-tx" }
+miden-tx-batch-prover = { path = "../miden-base/crates/miden-tx-batch-prover" }
 
 [patch."https://github.com/0xMiden/miden-node.git"]
 miden-node-block-producer = { path = "../miden-node/crates/block-producer" }

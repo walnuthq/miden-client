@@ -5,12 +5,12 @@ supported-types = ["RegularAccountUpdatableCode", "RegularAccountImmutableCode",
 
 [storage]
 [[storage.slots]]
-name = "miden::standards::auth::rpo_falcon512_acl::public_key"
+name = "miden::standards::auth::falcon512_poseidon2_acl::public_key"
 description = "Falcon public key"
-type = "miden::standards::auth::falcon512_rpo::pub_key"
+type = "miden::standards::auth::falcon512_poseidon2::pub_key"
 
 [[storage.slots]]
-name = "miden::standards::auth::rpo_falcon512_acl::config"
+name = "miden::standards::auth::falcon512_poseidon2_acl::config"
 description = "ACL configuration: [num_tracked_procs, allow_unauthorized_output_notes, allow_unauthorized_input_notes, 0]"
 type = [
     { name = "num_tracked_procs", type = "u32", description = "Number of procedures tracked for authentication" },
@@ -20,6 +20,6 @@ type = [
 ]
 
 [[storage.slots]]
-name = "miden::standards::auth::rpo_falcon512_acl::trigger_procedure_roots"
+name = "miden::standards::auth::falcon512_poseidon2_acl::trigger_procedure_roots"
 description = "Map with trigger procedure roots that require authentication"
 type = { key = "word", value = "word" }
