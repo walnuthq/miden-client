@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Fixes
+
+* [BUGFIX][cli] The `call` command now counts procedure arguments and results in field elements instead of in signature types, so procedures taking or returning aggregates (such as a struct of two felts) no longer reject the correct number of arguments and no longer mis-trim the output stack.
+
 ### Enhancements
 
+* [FEATURE][cli] The `call` command prints the procedure signature with type names instead of the raw type dump.
 * [FEATURE][cli] Added a `--payback-note-type` option to `swap` so the payback note can be created as public or private (defaults to private). Public payback works without any off-band advice now that SWAP derives the payback recipient deterministically ([#2190](https://github.com/0xMiden/rust-sdk/pull/2190)).
 
 ## 0.16.0-alpha.1 (2026-07-17)

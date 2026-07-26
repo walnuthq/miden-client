@@ -66,7 +66,7 @@ impl CallCmd {
         let package = load_package(&self.package)?;
 
         let digest = resolve_procedure_digest(&package, procedure)?;
-        let ProcedureSignature { param_count, result_count } =
+        let ProcedureSignature { param_felts, result_felts } =
             print_manifest_signature(&package, procedure);
 
         let args = parse_args(&self.args)?;
@@ -76,7 +76,7 @@ impl CallCmd {
             None => vec![],
         };
 
-        match param_count {
+        match param_felts {
             Some(expected) if args.len() != expected => {
                 return Err(CliError::InvalidArgument(format!(
                     "Procedure '{procedure}' expects {expected} argument(s), got {}.",
@@ -100,10 +100,10 @@ impl CallCmd {
         // embedding the library bytes in the script.
         let linked_builder = client.code_builder().with_dynamically_linked_library(&package)?;
 
-        // 1) Read-only execution to get return values. If `result_count` is unknown we skip
+        // 1) Read-only execution to get return values. If `result_felts` is unknown we skip
         // the drop sequence and let `print_output_stack` auto-detect results from the stack.
         let read_tx_script =
-            generate_tx_script(linked_builder.clone(), &digest, &args, result_count)?;
+            generate_tx_script(linked_builder.clone(), &digest, &args, result_felts)?;
 
         let advice_inputs = AdviceInputs::default().with_map(advice_entries.clone());
 
@@ -111,7 +111,7 @@ impl CallCmd {
             .execute_program(account_id, read_tx_script, advice_inputs, BTreeMap::new())
             .await?;
 
-        print_executed_program_stack(&output_stack, result_count);
+        print_executed_program_stack(&output_stack, result_felts);
 
         // 2) Transaction execution to get state delta.
         let delta_tx_script = generate_tx_script(linked_builder, &digest, &args, Some(0))?;
@@ -194,18 +194,19 @@ fn parse_args(args: &[String]) -> Result<Vec<Felt>, CliError> {
         .collect()
 }
 
-/// Parameter and result counts from a procedure's manifest signature. `None` means the
+/// Stack widths of a procedure's parameters and results, in field elements. `None` means the
 /// information is unavailable (procedure missing from manifest or export lacks type info).
 struct ProcedureSignature {
-    param_count: Option<usize>,
-    result_count: Option<usize>,
+    param_felts: Option<usize>,
+    result_felts: Option<usize>,
 }
 
-/// Prints the signature of `procedure_name` from the package manifest and returns its parameter
-/// and result counts. If the procedure is missing, prints the list of available exports.
+/// Prints the signature of `procedure_name` from the package manifest and returns how many field
+/// elements its parameters and results occupy on the stack. If the procedure is missing, prints the
+/// list of available exports.
 fn print_manifest_signature(package: &Package, procedure_name: &str) -> ProcedureSignature {
     const UNKNOWN: ProcedureSignature =
-        ProcedureSignature { param_count: None, result_count: None };
+        ProcedureSignature { param_felts: None, result_felts: None };
 
     let kebab_name = procedure_name.replace('_', "-");
     let quoted_kebab = format!("\"{kebab_name}\"");
@@ -226,24 +227,28 @@ fn print_manifest_signature(package: &Package, procedure_name: &str) -> Procedur
         }
 
         if let Some(sig) = &proc_export.signature {
-            let params: Vec<String> = sig.params.iter().map(|p| format!("{p:?}")).collect();
-            let results: Vec<String> = sig.results.iter().map(|r| format!("{r:?}")).collect();
+            let params: Vec<String> = sig.params.iter().map(format_type).collect();
+            let results: Vec<String> = sig.results.iter().map(format_type).collect();
 
-            let ret_str = if results.is_empty() {
-                String::new()
-            } else {
-                format!(" -> ({})", results.join(", "))
+            let ret_str = match results.as_slice() {
+                [] => String::new(),
+                [single] => format!(" -> {single}"),
+                many => format!(" -> ({})", many.join(", ")),
             };
 
-            let params_str = params.join(", ");
-            println!("Raw Signature: {procedure_name}({params_str}){ret_str}\n");
+            // Args are pushed one field element at a time, so counting types is not enough:
+            // an aggregate such as a two-field struct occupies two stack slots.
+            let param_felts = sig.params.iter().map(|p| p.size_in_felts()).sum();
+            let result_felts = sig.results.iter().map(|r| r.size_in_felts()).sum();
+
+            println!("Signature: {procedure_name}({}){ret_str}\n", params.join(", "));
 
             return ProcedureSignature {
-                param_count: Some(sig.params.len()),
-                result_count: Some(sig.results.len()),
+                param_felts: Some(param_felts),
+                result_felts: Some(result_felts),
             };
         }
-        println!("Raw Signature: {procedure_name}(...) [no type info]\n");
+        println!("Signature: {procedure_name}(...) [no type info]\n");
         return UNKNOWN;
     }
 
@@ -258,21 +263,41 @@ fn print_manifest_signature(package: &Package, procedure_name: &str) -> Procedur
     UNKNOWN
 }
 
+/// Renders a signature type as its bare name. A named aggregate renders as `struct <name> {..}`,
+/// which is too noisy for a signature line, so only the name is kept; anything else (`felt`,
+/// `u32`, an anonymous aggregate) is left as the type prints itself.
+fn format_type(ty: &impl std::fmt::Display) -> String {
+    let rendered = ty.to_string();
+    let Some(after_keyword) = rendered.strip_prefix("struct ") else {
+        return rendered;
+    };
+
+    // An anonymous aggregate continues straight into `{` or a `#[repr(..)]` attribute.
+    let name = after_keyword.split([' ', '{']).next().unwrap_or_default();
+    if name.is_empty() || name.starts_with('#') {
+        return rendered;
+    }
+
+    // Types coming from WIT carry their interface as a prefix, e.g.
+    // `miden:base/core-types@1.0.0/account-id`.
+    name.rsplit('/').next().unwrap_or(name).to_string()
+}
+
 /// Builds a transaction script that pushes `args`, calls the procedure at `digest`, and optionally
-/// drops the pushed args from under the results. `Some(n)` keeps the top `n` values; `None` skips
-/// drops.
+/// drops the pushed args from under the results. `Some(n)` keeps the top `n` field elements; `None`
+/// skips drops.
 fn generate_tx_script(
     code_builder: CodeBuilder,
     digest: &Word,
     args: &[Felt],
-    result_count: Option<usize>,
+    result_felts: Option<usize>,
 ) -> Result<TransactionScript, CliError> {
     // MASM `movup.n` only works for n in 2..=15. The VM stack exposes only the top
     // 16 elements; anything deeper lives in the overflow table and cannot be reached
     // by `movup`. So we can't drop args from under more than 15 results.
     // See miden-vm/docs/src/user_docs/assembly/instruction_reference.md (movup row)
     // and miden-vm/docs/src/design/stack/stack_ops.md (MOVUP/MOVDN sections).
-    if let Some(n) = result_count
+    if let Some(n) = result_felts
         && n > 15
     {
         return Err(CliError::InvalidArgument(format!(
@@ -291,7 +316,7 @@ fn generate_tx_script(
 
     let to_drop = args.len();
     if to_drop > 0 {
-        match result_count {
+        match result_felts {
             Some(0) => {
                 for _ in 0..to_drop {
                     script.push_str("    drop\n");

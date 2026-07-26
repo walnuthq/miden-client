@@ -80,6 +80,32 @@ tracing            = { version = "0.1" }
 tracing-subscriber = { default-features = false, version = "0.3" }
 uuid               = { version = "1.10" }
 
+# Build the whole miden-vm dependency set from the debug-info consolidation branch, and miden-debug
+# from the branch that targets it. All crates from a workspace must be patched together, otherwise
+# the protocol crates keep pulling their own copy from crates.io and the two sets of types don't
+# match.
+[patch.crates-io]
+miden-ace-codegen         = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-air                 = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-assembly            = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-assembly-syntax     = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-assembly-syntax-cst = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-core                = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-core-lib            = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-debug               = { branch = "bitwalker/v0.25-migration", git = "https://github.com/0xMiden/miden-debug.git" }
+miden-debug-types         = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-mast-package        = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-package-registry    = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-processor           = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-project             = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-prover              = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-utils-core-derive   = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-utils-diagnostics   = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-utils-indexing      = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-utils-sync          = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+miden-verifier            = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+midenc-hir-type           = { branch = "bitwalker/package-debug-info-consolidation", git = "https://github.com/0xMiden/miden-vm.git" }
+
 # Lints are set to warn for development, which are promoted to errors in CI.
 [workspace.lints.clippy]
 # Pedantic lints are set to a lower priority which allows lints in the group to be selectively enabled.
