@@ -656,6 +656,213 @@ fn account_inspect_flags_require_inspect() {
     package_cmd.current_dir(&temp_dir).assert().failure();
 }
 
+// PACKAGE TESTS
+// ================================================================================================
+
+/// Returns the path of a package shipped in the CLI's default packages directory.
+fn default_package_path(cli_dir: &Path, package: &str) -> PathBuf {
+    cli_dir.join(MIDEN_DIR).join("packages").join(package)
+}
+
+/// `package inspect <FILE>` prints the package's identity along with the procedures it exports and
+/// their signatures.
+#[test]
+fn package_inspect_prints_metadata_and_exports() {
+    let temp_dir = init_cli().1;
+    let package = default_package_path(&temp_dir, "auth/basic-auth.masp");
+
+    let mut inspect_cmd = cargo_bin_cmd!("miden-client");
+    inspect_cmd.args(["package", "inspect", package.to_str().unwrap()]);
+    inspect_cmd
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Package:"))
+        .stdout(contains("Digest:"))
+        .stdout(contains("account-component"))
+        .stdout(contains("auth_tx"))
+        // Signatures come from the package manifest, so they are rendered as their function type.
+        .stdout(contains("fn([felt; 4])"))
+        .stdout(contains("MAST Root"))
+        // An empty dependency set is reported rather than omitted, so the absence of dependencies
+        // cannot be confused with the section being missing.
+        .stdout(contains("Dependencies: none"));
+}
+
+/// `package inspect <FILE> --verbose` appends the MASM disassembly of each exported procedure under
+/// that procedure's own header.
+#[test]
+fn package_inspect_verbose_prints_disassembly() {
+    let temp_dir = init_cli().1;
+    let package = default_package_path(&temp_dir, "auth/basic-auth.masp");
+
+    let mut inspect_cmd = cargo_bin_cmd!("miden-client");
+    inspect_cmd.args(["package", "inspect", package.to_str().unwrap(), "--verbose"]);
+    let assert = inspect_cmd.current_dir(&temp_dir).assert().success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+
+    // The package exports a single procedure, so exactly one disassembly block is printed.
+    assert_eq!(
+        stdout.matches("\nProcedure ").count(),
+        1,
+        "exactly one procedure should be disassembled, got:\n{stdout}"
+    );
+
+    // The disassembly must sit under the procedure's header, not float free of it.
+    let header = stdout.find("\nProcedure ").expect("procedure header is printed");
+    assert!(
+        stdout[header..].contains("basic_block"),
+        "the disassembly should follow the procedure header, got:\n{stdout}"
+    );
+}
+
+/// Inspection reads the package on its own, so it must work in a directory that has no client
+/// configuration, and must not create one.
+#[test]
+#[serial_test::file_serial]
+fn package_inspect_needs_no_client_config() {
+    set_isolated_miden_home();
+
+    let source_dir = init_cli().1;
+    let bare_dir = temp_dir().join(format!("cli-test-{}", rand::rng().random::<u64>()));
+    fs::create_dir_all(&bare_dir).unwrap();
+    let package = bare_dir.join("basic-auth.masp");
+    fs::copy(default_package_path(&source_dir, "auth/basic-auth.masp"), &package).unwrap();
+
+    let mut inspect_cmd = cargo_bin_cmd!("miden-client");
+    inspect_cmd.args(["package", "inspect", package.to_str().unwrap()]);
+    inspect_cmd
+        .current_dir(&bare_dir)
+        .assert()
+        .success()
+        .stdout(contains("auth_tx"));
+
+    assert!(
+        !bare_dir.join(MIDEN_DIR).exists(),
+        "inspecting a package should not initialize a client"
+    );
+}
+
+/// A missing path and a file that is not a package must both fail with a message naming the file.
+#[test]
+fn package_inspect_rejects_invalid_files() {
+    let temp_dir = init_cli().1;
+
+    let mut missing_cmd = cargo_bin_cmd!("miden-client");
+    missing_cmd.args(["package", "inspect", "does-not-exist.masp"]);
+    missing_cmd
+        .current_dir(&temp_dir)
+        .assert()
+        .failure()
+        .stderr(contains("Package file not found"));
+
+    // A readable file is rejected on its contents, not on its extension.
+    let not_a_package = temp_dir.join("not-a-package.masp");
+    fs::write(&not_a_package, b"definitely not a package").unwrap();
+
+    let mut invalid_cmd = cargo_bin_cmd!("miden-client");
+    invalid_cmd.args(["package", "inspect", not_a_package.to_str().unwrap()]);
+    invalid_cmd
+        .current_dir(&temp_dir)
+        .assert()
+        .failure()
+        .stderr(contains("Failed to deserialize package"));
+}
+
+/// Dependencies and non-procedure exports each get their own table. None of the packages shipped
+/// with the CLI carry either, so this builds one that does.
+#[test]
+fn package_inspect_prints_dependencies_and_other_exports() {
+    let temp_dir = init_cli().1;
+    let package_path = temp_dir.join("with-dependency.masp");
+    build_dependent_masp(&package_path);
+
+    let mut inspect_cmd = cargo_bin_cmd!("miden-client");
+    inspect_cmd.args(["package", "inspect", package_path.to_str().unwrap()]);
+    inspect_cmd
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Other exports (1):"))
+        .stdout(contains("balance"))
+        .stdout(contains("type"))
+        .stdout(contains("Dependencies (1):"))
+        .stdout(contains("some-dependency"))
+        .stdout(contains("2.1.0"))
+        .stdout(contains("library"));
+}
+
+/// Helper: builds a package exporting one procedure and one type, and depending on another
+/// package, then writes the serialized `.masp` to `out_path`.
+fn build_dependent_masp(out_path: &Path) {
+    use std::str::FromStr;
+
+    use miden_client::Word;
+    use miden_client::assembly::{CodeBuilder, Library};
+    use miden_client::vm::{Package, PackageExport, ProcedureExport, QualifiedProcedureName};
+    use miden_mast_package::{Dependency, PathBuf as ExportPath, TargetType, TypeExport, Version};
+
+    let code = r"
+        use miden::core::sys
+
+        @account_procedure
+        pub proc ping
+            push.1
+            drop
+            exec.sys::truncate_stack
+        end
+    ";
+
+    let library: Library = CodeBuilder::default()
+        .compile_component_code("miden::testing::dependent", code)
+        .expect("failed to compile dependent component")
+        .into();
+
+    // A manifest with no procedures is rejected, so the type export rides along with a procedure.
+    let mut exports: Vec<PackageExport> = Vec::new();
+    for module_info in library.module_infos() {
+        for (_, proc_info) in module_info.procedures() {
+            let name = QualifiedProcedureName::new(module_info.path(), proc_info.name.clone());
+            exports.push(PackageExport::Procedure(ProcedureExport {
+                path: name.into_inner(),
+                node: None,
+                source_node: None,
+                digest: proc_info.digest,
+                signature: proc_info.signature.as_deref().cloned(),
+                attributes: proc_info.attributes.clone(),
+            }));
+        }
+    }
+    exports.push(PackageExport::Type(TypeExport {
+        path: Arc::from(
+            ExportPath::from_str("miden::testing::dependent::balance")
+                .expect("valid export path")
+                .into_boxed_path(),
+        ),
+        ty: midenc_hir_type::Type::Felt,
+    }));
+
+    let dependency = Dependency {
+        name: "some-dependency".to_string().into(),
+        kind: TargetType::Library,
+        version: Version::new(2, 1, 0),
+        digest: Word::from(&[1u32, 2, 3, 4]),
+    };
+
+    let package = Package::create_with_modules(
+        "with-dependency".to_string().into(),
+        Version::new(1, 0, 0),
+        TargetType::AccountComponent,
+        library.mast_forest().clone(),
+        exports,
+        [],
+        [dependency],
+    )
+    .expect("failed to create dependent package");
+
+    fs::write(out_path, package.to_bytes()).expect("failed to write dependent .masp");
+}
+
 // IMPORT TESTS
 // ================================================================================================
 

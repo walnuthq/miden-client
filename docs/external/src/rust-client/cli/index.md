@@ -91,6 +91,29 @@ The `--inspect` flag lists the procedures an account exposes, grouped into resol
 - `-p, --package <FILE>`: Supplies an additional `.masp` package used to resolve procedure MAST roots to their names and signatures, on top of the packages in the configured packages directory. It is repeatable (pass it once per package); when the same MAST root is exported by more than one package the first-loaded one wins (passed packages are consulted first) and a warning lists the packages involved. Procedures whose name cannot be resolved are still listed by their MAST root.
 - `-v, --verbose`: Prints the MASM disassembly of each procedure.
 
+### `package`
+
+Inspect Miden packages (`.masp`).
+
+#### `package inspect <FILE>`
+
+Prints the contents of a package file: its name, version, digest, target type and description, followed by a table of the procedures it exports (with their signature and MAST root), a table of its non-procedure exports (constants and types, shown only when the package has any), and a table of its dependencies (each with the version and digest it is pinned to).
+
+Procedures are listed by their fully-qualified path, since a package may export the same leaf name from several modules. A signature is shown only when the package manifest records one for that procedure, which depends on how the package was built rather than on the language it was written in; procedures without one are shown as `<unknown>`.
+
+The package is read from disk on its own, so this command needs neither an initialized client nor a node connection, and can be run from any directory.
+
+It has one optional flag:
+
+- `-v, --verbose`: Also prints the MASM disassembly of each exported procedure. A procedure re-exported from a dependency disassembles to an external node, as its body lives in that dependency's package.
+
+```sh
+miden-client package inspect .miden/packages/basic-wallet.masp
+miden-client package inspect ./my-contract.masp --verbose
+```
+
+This complements `account --inspect`, which reports what a deployed account exposes; `package inspect` reports what a package file contains.
+
 ### `new-wallet`
 
 Creates a new wallet account.

@@ -26,6 +26,7 @@ use commands::network_note_status::NetworkNoteStatusCmd;
 use commands::new_account::{NewAccountCmd, NewWalletCmd};
 use commands::new_transactions::{ConsumeNotesCmd, MintCmd, PswapCmd, SwapCmd, TransferCmd};
 use commands::notes::NotesCmd;
+use commands::package::PackageCmd;
 use commands::sync::SyncCmd;
 use commands::tags::TagsCmd;
 use commands::transactions::TransactionCmd;
@@ -401,6 +402,7 @@ pub enum Command {
     Exec(ExecCmd),
     NetworkNoteStatus(NetworkNoteStatusCmd),
     Call(CallCmd),
+    Package(PackageCmd),
 }
 
 /// CLI entry point.
@@ -418,6 +420,10 @@ impl Cli {
             },
             Command::NetworkNoteStatus(cmd) => {
                 return cmd.execute().await;
+            },
+            Command::Package(package_cmd) => {
+                package_cmd.execute()?;
+                return Ok(());
             },
             _ => {},
         }
@@ -449,7 +455,10 @@ impl Cli {
                 Box::pin(new_account.execute(client, keystore)).await
             },
             Command::Import(import) => import.execute(client, keystore).await,
-            Command::Init(_) | Command::ClearConfig(_) | Command::NetworkNoteStatus(_) => Ok(()), /* Already handled earlier */
+            Command::Init(_)
+            | Command::ClearConfig(_)
+            | Command::NetworkNoteStatus(_)
+            | Command::Package(_) => Ok(()), // Already handled earlier
             Command::Info(info_cmd) => info::print_client_info(&client, info_cmd.rpc_status).await,
             Command::Notes(notes) => Box::pin(notes.execute(client)).await,
             Command::Sync(sync) => sync.execute(client).await,

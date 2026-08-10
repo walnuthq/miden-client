@@ -148,7 +148,8 @@ impl CallCmd {
 // HELPERS
 // ================================================================================================
 
-fn load_package(path: &Path) -> Result<Package, CliError> {
+/// Reads and deserializes the `.masp` package at `path`.
+pub(crate) fn load_package(path: &Path) -> Result<Package, CliError> {
     if !path.exists() {
         return Err(CliError::InvalidArgument(format!(
             "Package file not found: {}",
