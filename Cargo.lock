@@ -2809,6 +2809,7 @@ dependencies = [
  "miden-agglayer",
  "miden-assembly-syntax",
  "miden-debug",
+ "miden-debug-engine",
  "miden-node-proto-build",
  "miden-objects",
  "miden-processor",
@@ -2873,6 +2874,7 @@ dependencies = [
  "predicates",
  "rand 0.10.3",
  "regex",
+ "rustc-demangle",
  "serde",
  "serial_test",
  "thiserror",
@@ -3078,8 +3080,6 @@ dependencies = [
 [[package]]
 name = "miden-debug"
 version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0626dd3dda4a7418375f6213aa9694952db67fb8607010626a7c546730b8d3"
 dependencies = [
  "clap",
  "compact_str",
@@ -3101,8 +3101,6 @@ dependencies = [
 [[package]]
 name = "miden-debug-dap"
 version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "611db9fc8cb57fd928d85f15c445f9700a4f73e3fd00ee008ec58e1efca92497"
 dependencies = [
  "serde",
  "serde_json",
@@ -3112,8 +3110,6 @@ dependencies = [
 [[package]]
 name = "miden-debug-engine"
 version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa3e0d718eff277b906b7791e048a3f1368d47bba02a40153ec15c9a5faa066"
 dependencies = [
  "clap",
  "hashbrown 0.17.1",
