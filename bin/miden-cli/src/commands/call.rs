@@ -109,6 +109,27 @@ pub struct CallCmd {
                      hand-written MASM intrinsics and frames that could not be named."
     )]
     verbose: u8,
+
+    /// With `--trace`: tag each frame with its kind, `[contract]`, `[library]` or `[internal]`.
+    #[cfg(feature = "trace")]
+    #[arg(
+        long,
+        requires = "trace",
+        long_help = "With `--trace`, start each frame's line with the kind of code it ran: \
+                     `[contract]`, `[library]` or `[internal]`, the classes `--verbose` filters \
+                     on. Lets a tool print every frame with `-vv` and filter afterwards."
+    )]
+    trace_kinds: bool,
+}
+
+/// What `--trace` asked for.
+#[derive(Clone, Copy)]
+#[cfg_attr(not(feature = "trace"), allow(dead_code))]
+struct TraceOptions {
+    /// How many `-v` were given.
+    verbose: u8,
+    /// Whether each frame is tagged with its kind.
+    kinds: bool,
 }
 
 impl CallCmd {
@@ -132,7 +153,10 @@ impl CallCmd {
         let target_id = parse_account_id(&client, account_str).await?;
         let call_code = self.resolve_call_code(&client, &cli_config, procedure)?;
         #[cfg(feature = "trace")]
-        let trace = self.trace.then_some(self.verbose);
+        let trace = self.trace.then_some(TraceOptions {
+            verbose: self.verbose,
+            kinds: self.trace_kinds,
+        });
         #[cfg(not(feature = "trace"))]
         let trace = None;
 
@@ -310,12 +334,12 @@ struct CallCode {
     package: Option<Package>,
 }
 
-/// What a call prints: result types, and with `--trace` the verbose level and the package.
+/// What a call prints: result types, and with `--trace` the trace options and the package.
 struct CallOutput<'a> {
     typed: Option<&'a TypedProcInfo>,
     package: Option<&'a Package>,
     entry: Option<&'a (String, String)>,
-    trace: Option<u8>,
+    trace: Option<TraceOptions>,
 }
 
 /// Runs the call without a transaction and prints the result, then the trace if asked. A failed run
@@ -329,7 +353,7 @@ async fn execute_and_print_call<AUTH: Keystore + Sync + 'static>(
     output: CallOutput<'_>,
 ) -> Result<(), CliError> {
     #[cfg(feature = "trace")]
-    if let Some(verbose) = output.trace {
+    if let Some(trace) = output.trace {
         let (outcome, replay) = client
             .execute_program_with_trace(
                 account_id,
@@ -349,7 +373,13 @@ async fn execute_and_print_call<AUTH: Keystore + Sync + 'static>(
             .zip(output.typed)
             .and_then(|(stack, typed)| typed.decode_result(stack.as_slice()).ok().flatten());
         let entry = output.entry.map(|(name, args)| EntryCall { name, args, result });
-        print_call_trace(replay.as_ref(), output.package, entry.as_ref(), verbose);
+        print_call_trace(
+            replay.as_ref(),
+            output.package,
+            entry.as_ref(),
+            trace.verbose,
+            trace.kinds,
+        );
 
         return outcome.map(|_| ()).map_err(Into::into);
     }
@@ -399,7 +429,7 @@ async fn run_remote_call<AUTH: Keystore + Sync + 'static>(
     foreign_account: Box<ForeignAccount>,
     call_code: CallCode,
     advice_entries: Vec<(Word, Vec<Felt>)>,
-    trace: Option<u8>,
+    trace: Option<TraceOptions>,
 ) -> Result<(), CliError> {
     let CallCode {
         builder,
@@ -448,7 +478,7 @@ async fn run_local_call<AUTH: Keystore + Sync + 'static>(
     account_id: AccountId,
     call_code: CallCode,
     advice_entries: Vec<(Word, Vec<Felt>)>,
-    trace: Option<u8>,
+    trace: Option<TraceOptions>,
 ) -> Result<(), CliError> {
     let CallCode {
         builder,
