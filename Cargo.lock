@@ -3080,6 +3080,7 @@ dependencies = [
 [[package]]
 name = "miden-debug"
 version = "0.18.0"
+source = "git+https://github.com/walnuthq/miden-debug?rev=a4625384374603143807e2d2f63dc30dc59ce48e#a4625384374603143807e2d2f63dc30dc59ce48e"
 dependencies = [
  "clap",
  "compact_str",
@@ -3101,6 +3102,7 @@ dependencies = [
 [[package]]
 name = "miden-debug-dap"
 version = "0.18.0"
+source = "git+https://github.com/walnuthq/miden-debug?rev=a4625384374603143807e2d2f63dc30dc59ce48e#a4625384374603143807e2d2f63dc30dc59ce48e"
 dependencies = [
  "serde",
  "serde_json",
@@ -3110,6 +3112,7 @@ dependencies = [
 [[package]]
 name = "miden-debug-engine"
 version = "0.18.0"
+source = "git+https://github.com/walnuthq/miden-debug?rev=a4625384374603143807e2d2f63dc30dc59ce48e#a4625384374603143807e2d2f63dc30dc59ce48e"
 dependencies = [
  "clap",
  "hashbrown 0.17.1",

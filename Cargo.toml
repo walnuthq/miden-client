@@ -108,8 +108,9 @@ must_use_candidate          = "allow" # This marks many fn's which isn't helpful
 should_panic_without_expect = "allow" # We don't care about the specific panic message.
 # End of pedantic lints.
 
-# The call-trace support in the debug engine is not published yet; point at the local checkout
-# until it is, then drop this entry so the caret requirement above picks it up from crates.io.
+# The call-trace support in the debug engine (0xMiden/miden-debug#150) is not published yet. Walnut
+# pins its head on the VM 0.35 line, the one this release builds against, so the CLI builds anywhere
+# without a local checkout. Drop this once a miden-debug release with call traces supports VM 0.35.
 [patch.crates-io]
-miden-debug        = { path = "../miden-debug" }
-miden-debug-engine = { path = "../miden-debug/crates/engine" }
+miden-debug        = { git = "https://github.com/walnuthq/miden-debug", rev = "a4625384374603143807e2d2f63dc30dc59ce48e" }
+miden-debug-engine = { git = "https://github.com/walnuthq/miden-debug", rev = "a4625384374603143807e2d2f63dc30dc59ce48e" }
