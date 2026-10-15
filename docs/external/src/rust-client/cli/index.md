@@ -613,6 +613,7 @@ Usage: `miden-client call <ACCOUNT_ID>:<PROCEDURE> [ARGS]... [--package <PACKAGE
 | `--inputs-path <INPUTS_PATH>` | Path to a TOML file with advice map entries.                  | `-i`    |
 | `--trace`                     | Print the hierarchy of procedure calls the execution made. Needs a build with the `trace` feature. |         |
 | `--verbose`                   | With `--trace`, widen what is shown: `-v` adds library functions, `-vv` shows every frame. | `-v`    |
+| `--trace-kinds`               | With `--trace`, start each frame with its kind: `[contract]`, `[library]` or `[internal]`. |         |
 
 The target is a single argument of the form `<ACCOUNT_ID>:<PROCEDURE>`. For an account tracked by the client, the ID may be given as a partial ID; an account that isn't tracked has to be named by its full hex ID or its bech32 address, since a prefix is resolved against the local store. The procedure name is matched against the package's exports with `_` and `-` treated as equivalent, so it can be written in either snake_case or kebab-case (`get_count` matches the export `get-count`).
 

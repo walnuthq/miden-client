@@ -33,6 +33,15 @@ enum FrameKind {
 
 impl FrameKind {
     /// The last kind that is still shown at a `--verbose` level.
+    /// The tag `--trace-kinds` prints before the frame.
+    fn tag(self) -> &'static str {
+        match self {
+            Self::User => "[contract]",
+            Self::Library => "[library]",
+            Self::Internal => "[internal]",
+        }
+    }
+
     fn shown_at(verbose: u8) -> Self {
         match verbose {
             0 => Self::User,
@@ -42,12 +51,14 @@ impl FrameKind {
     }
 }
 
-/// Prints the call tree of the replayed run, under the result of the real run.
+/// Prints the call tree of the replayed run, under the result of the real run. With `kinds`, each
+/// frame starts with its [`FrameKind`] tag.
 pub fn print_call_trace(
     replay: Option<&CallTraceReplay>,
     package: Option<&Package>,
     entry: Option<&EntryCall<'_>>,
     verbose: u8,
+    kinds: bool,
 ) {
     let Some(replay) = replay else {
         println!("\nTrace: the execution left no recording.");
@@ -65,7 +76,13 @@ pub fn print_call_trace(
         None => FrameKind::Internal,
     };
 
-    let mut printer = Printer { entry, max_kind, shown: 0, hidden: 0 };
+    let mut printer = Printer {
+        entry,
+        max_kind,
+        kinds,
+        shown: 0,
+        hidden: 0,
+    };
     println!("\nCall trace:");
     printer.print(&replay.trace.roots, 0);
 
@@ -87,6 +104,8 @@ struct Printer<'a> {
     entry: Option<&'a EntryCall<'a>>,
     /// The last kind that is still printed.
     max_kind: FrameKind,
+    /// Whether each frame starts with its kind's tag.
+    kinds: bool,
     shown: usize,
     hidden: usize,
 }
@@ -134,7 +153,12 @@ impl Printer<'_> {
                 },
                 None => "stopped here".to_string(),
             };
-            println!("{indent}{label}({args}){results}  {cycles}");
+            let tag = if self.kinds {
+                format!("{} ", kind.tag())
+            } else {
+                String::new()
+            };
+            println!("{indent}{tag}{label}({args}){results}  {cycles}");
 
             self.print(&frame.children, depth + 1);
         }
@@ -336,6 +360,13 @@ mod tests {
         assert_eq!(FrameKind::shown_at(1), FrameKind::Library);
         assert_eq!(FrameKind::shown_at(2), FrameKind::Internal);
         assert_eq!(FrameKind::shown_at(7), FrameKind::Internal);
+    }
+
+    #[test]
+    fn kinds_have_distinct_tags() {
+        assert_eq!(FrameKind::User.tag(), "[contract]");
+        assert_eq!(FrameKind::Library.tag(), "[library]");
+        assert_eq!(FrameKind::Internal.tag(), "[internal]");
     }
 
     #[test]
