@@ -12,8 +12,16 @@ use miden_client::note::standards::{PswapNoteStorage, SwapNoteStorage};
 use miden_client::note::{P2idNoteStorage, P2ideNoteStorage, StandardNote};
 use miden_client::transaction::{ExecutedTransaction, InputNote};
 use miden_client::utils::{Deserializable, hex_to_bytes};
-use miden_client::vm::MIN_STACK_DEPTH;
-use miden_client::{AssetError, Client, Felt, WORD_SIZE, Word};
+use miden_client::vm::{ExecutionError, MIN_STACK_DEPTH, OperationError, error_code_from_msg};
+use miden_client::{
+    AssetError,
+    Client,
+    ClientError,
+    Felt,
+    TransactionExecutorError,
+    WORD_SIZE,
+    Word,
+};
 use serde::Deserialize;
 
 use super::{CLIENT_CONFIG_FILE_NAME, create_dynamic_table, get_account_with_id_prefix};
@@ -830,6 +838,61 @@ pub(crate) async fn format_standard_note_storage<AUTH>(
     Ok(fields.map_or_else(|| NO_VALUE.to_string(), |fields| fields.join("\n")))
 }
 
+// EMPTY TRANSACTION
+// ================================================================================================
+
+/// The transaction kernel's assertion message for a transaction that changes nothing.
+///
+/// The message is hashed into the error code the assertion carries, and compared against it. It
+/// only decides whether an explanatory line is printed: if the kernel ever rewords it, the line
+/// stops appearing and nothing else changes.
+const EMPTY_TRANSACTION_ASSERTION: &str =
+    "executed transaction neither changed the account state, nor consumed any notes";
+
+/// The line printed for a transaction that the kernel rejected because it changed nothing.
+const EMPTY_TRANSACTION_REPORT: &str = "The transaction was rejected because it did not change the \
+     account state and did not consume any notes.";
+
+/// Returns true when `error` is the transaction kernel's rejection of a transaction that neither
+/// changed the account state nor consumed a note.
+pub(crate) fn is_empty_transaction_error(error: &ClientError) -> bool {
+    matches!(
+        error,
+        ClientError::TransactionExecutorError(
+            TransactionExecutorError::TransactionProgramExecutionFailed(
+                ExecutionError::OperationError {
+                    err: OperationError::FailedAssertion { err_code, .. },
+                    ..
+                },
+            ),
+        ) if *err_code == error_code_from_msg(EMPTY_TRANSACTION_ASSERTION)
+    )
+}
+
+/// Builds the error the executor raises for a failed assertion with the message `msg`.
+#[cfg(test)]
+fn assertion_error(msg: &str) -> ClientError {
+    let assertion = OperationError::FailedAssertion {
+        err_code: error_code_from_msg(msg),
+        err_msg: None,
+    }
+    .with_context();
+    ClientError::TransactionExecutorError(
+        TransactionExecutorError::TransactionProgramExecutionFailed(assertion),
+    )
+}
+
+/// Builds the error the kernel raises for a transaction that changes nothing.
+#[cfg(test)]
+pub(crate) fn empty_transaction_error() -> ClientError {
+    assertion_error(EMPTY_TRANSACTION_ASSERTION)
+}
+
+/// Prints why the kernel rejected a transaction that changed nothing.
+pub(crate) fn print_empty_transaction_report() {
+    println!("\n{EMPTY_TRANSACTION_REPORT}");
+}
+
 // ECDSA PUBLIC KEY PARSING
 // ================================================================================================
 
@@ -1073,5 +1136,17 @@ mod tests {
 
         parse_ecdsa_public_key(&not_on_curve)
             .expect_err("an uncompressed point off the curve should be rejected");
+    }
+
+    #[test]
+    fn the_kernel_rejection_of_an_empty_transaction_is_recognized() {
+        assert!(super::is_empty_transaction_error(&super::empty_transaction_error()));
+    }
+
+    #[test]
+    fn another_failed_assertion_is_not_an_empty_transaction() {
+        let error = super::assertion_error("some other assertion");
+
+        assert!(!super::is_empty_transaction_error(&error));
     }
 }
