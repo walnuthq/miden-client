@@ -86,7 +86,6 @@ use miden_protocol::note::{
 use miden_protocol::protocol_config::ProtocolConfig;
 use miden_protocol::transaction::PartialBlockchain;
 use miden_protocol::vm::MIN_STACK_DEPTH;
-#[cfg(feature = "trace")]
 use miden_protocol::vm::Package;
 use miden_protocol::{Felt, Word};
 use miden_standards::account::auth::{
@@ -335,6 +334,7 @@ where
             transaction_request,
             TransactionExecutionMode::Standard,
             None,
+            &[],
         ))
         .await
     }
@@ -384,6 +384,7 @@ where
                 transaction_request,
                 TransactionExecutionMode::Standard,
                 Some(Box::new(anchor)),
+                &[],
             )
             .await?;
 
@@ -516,6 +517,7 @@ where
             transaction_request,
             TransactionExecutionMode::Dap,
             None,
+            &[],
         )
         .await
     }
@@ -529,6 +531,7 @@ where
         transaction_request: TransactionRequest,
         execution_mode: TransactionExecutionMode,
         anchor: Option<Box<ChainAnchor>>,
+        #[cfg_attr(not(feature = "trace"), allow(unused_variables))] packages: &[&Package],
     ) -> Result<TransactionResult, ClientError> {
         let account: PartialAccount =
             self.get_native_account_record(account_id).await?.try_into()?;
@@ -572,6 +575,18 @@ where
             #[cfg(feature = "dap")]
             TransactionExecutionMode::Dap => {
                 self.build_dap_executor(&data_store)?
+                    .execute_transaction(account_id, prep.block_num, notes, prep.tx_args)
+                    .await?
+            },
+            #[cfg(feature = "trace")]
+            TransactionExecutionMode::Trace => {
+                // Same procedure roots as the account code and the note scripts, so these forests
+                // with debug info win.
+                for package in packages {
+                    data_store.mast_store().insert_package(package);
+                }
+                self.build_executor(&data_store)?
+                    .with_program_executor::<trace::TraceProgramExecutor>()
                     .execute_transaction(account_id, prep.block_num, notes, prep.tx_args)
                     .await?
             },
@@ -1073,6 +1088,35 @@ where
         (outcome, trace::take_recording().map(trace::replay_call_trace))
     }
 
+    /// Executes the transaction specified by the request (e.g. consuming notes) with the recording
+    /// executor, and replays it in the debug engine for the call tree of the whole transaction.
+    /// Like [`Self::execute_transaction`], it never proves, submits or changes the local database.
+    ///
+    /// A failed execution keeps the trace up to the failure. The replay is `None` if the
+    /// transaction never ran. Each package's debug info names the frames of the code it compiles
+    /// to (account components, note scripts).
+    #[cfg(feature = "trace")]
+    pub async fn execute_transaction_with_trace(
+        &self,
+        account_id: AccountId,
+        transaction_request: TransactionRequest,
+        packages: &[&Package],
+    ) -> (Result<TransactionResult, ClientError>, Option<trace::CallTraceReplay>) {
+        // Drop a recording left by an earlier run.
+        drop(trace::take_recording());
+
+        let outcome = Box::pin(self.execute_transaction_with_mode(
+            account_id,
+            transaction_request,
+            TransactionExecutionMode::Trace,
+            None,
+            packages,
+        ))
+        .await;
+
+        (outcome, trace::take_recording().map(trace::replay_call_trace))
+    }
+
     // HELPERS
     // --------------------------------------------------------------------------------------------
 
@@ -1563,6 +1607,8 @@ enum TransactionExecutionMode {
     Standard,
     #[cfg(feature = "dap")]
     Dap,
+    #[cfg(feature = "trace")]
+    Trace,
 }
 
 /// Data-store-independent state produced during transaction preparation.
