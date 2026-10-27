@@ -1,9 +1,8 @@
-use std::io;
 #[cfg(feature = "dap")]
 use std::net::SocketAddr;
-#[cfg(feature = "dap")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{fs, io};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use miden_client::account::AccountId;
@@ -12,6 +11,7 @@ use miden_client::keystore::Keystore;
 use miden_client::note::{
     BlockNumber,
     Note,
+    NoteFile,
     NoteTag,
     NoteType as MidenNoteType,
     get_input_note_with_id_prefix,
@@ -25,9 +25,13 @@ use miden_client::transaction::{
     TransactionRequest,
     TransactionRequestBuilder,
 };
-use miden_client::{Client, RemoteTransactionProver};
+use miden_client::{Client, Deserializable, RemoteTransactionProver};
 use tracing::info;
 
+#[cfg(feature = "trace")]
+use crate::commands::call_trace::print_call_trace;
+#[cfg(feature = "trace")]
+use crate::commands::new_account::load_packages;
 use crate::config::CliConfig;
 use crate::errors::CliError;
 use crate::utils::{
@@ -297,6 +301,58 @@ pub struct ConsumeNotesCmd {
     #[arg(short, long, default_value_t = false)]
     force: bool,
 
+    /// A note to consume, read from a file instead of the store: a serialized `Note`, or a note
+    /// file holding a committed note (its proof is ignored). Repeatable.
+    #[arg(
+        long = "note-file",
+        value_name = "FILE",
+        long_help = "Consume the note in FILE, which needs not be in the store: a serialized \
+                     `Note`, or a note file (`NoteFile::Committed`) whose proof is ignored. The \
+                     note is consumed as an unauthenticated input note, which the transaction \
+                     kernel doesn't check against the chain: whether it exists or was already \
+                     consumed is only checked by the node when a block is built. So with \
+                     `--dry-run` any note can be simulated, including one already consumed \
+                     on-chain. Repeatable, and combined with the note IDs."
+    )]
+    note_files: Vec<PathBuf>,
+
+    /// Execute the transaction and print its effects, without proving or submitting it.
+    #[arg(
+        long,
+        conflicts_with = "force",
+        long_help = "Execute the transaction and print its effects, then stop: no confirmation \
+                     prompt, no proving, no submission, and the store is left unchanged."
+    )]
+    dry_run: bool,
+
+    /// With `--dry-run`: print the tree of procedure calls of the whole transaction.
+    #[cfg(feature = "trace")]
+    #[arg(
+        long,
+        requires = "dry_run",
+        long_help = "With `--dry-run`, print the hierarchy of procedure calls the transaction \
+                     made (note scripts, account procedures, kernel), with each call's \
+                     arguments, return value and cycle count. Procedure names come from the \
+                     debug info in each `--package`; without one every frame is unnamed."
+    )]
+    trace: bool,
+
+    /// With `--trace`: `-v` also shows library calls, `-vv` shows every call.
+    #[cfg(feature = "trace")]
+    #[arg(short, long, action = clap::ArgAction::Count, requires = "trace")]
+    verbose: u8,
+
+    /// With `--trace`: tag each frame with its kind, `[contract]`, `[library]` or `[internal]`.
+    #[cfg(feature = "trace")]
+    #[arg(long, requires = "trace")]
+    trace_kinds: bool,
+
+    /// With `--trace`: a package (`.masp`) whose debug info names the frames of the code it
+    /// compiles to, such as the account's components or a note script. Repeatable.
+    #[cfg(feature = "trace")]
+    #[arg(long = "package", value_name = "FILE", requires = "trace")]
+    packages: Vec<PathBuf>,
+
     /// Flag to delegate proving to the remote prover specified in the config file.
     #[arg(long, default_value_t = false)]
     delegate_proving: bool,
@@ -327,11 +383,16 @@ impl ConsumeNotesCmd {
         for note_id in &self.list_of_notes {
             input_notes.push((resolve_input_note(&client, note_id).await?, None));
         }
+        // Never looked up in the store, so they run unauthenticated and its consumed-note check
+        // doesn't apply.
+        for path in &self.note_files {
+            input_notes.push((read_note_file(path)?, None));
+        }
 
         let account_id =
             get_input_acc_id_by_prefix_or_default(&client, self.account_id.clone()).await?;
 
-        if input_notes.is_empty() {
+        if input_notes.is_empty() && self.note_files.is_empty() {
             info!("No input note IDs provided, getting all notes consumable by {}", account_id);
             let consumable_notes = client.get_consumable_notes(Some(account_id)).await?;
             for (note_record, _) in consumable_notes {
@@ -372,6 +433,24 @@ impl ConsumeNotesCmd {
                 self.record.as_deref(),
             )
             .await;
+        }
+
+        #[cfg(feature = "trace")]
+        if self.trace {
+            let packages = load_packages(&CliConfig::load()?, &self.packages)?;
+            return trace_transaction(
+                &client,
+                account_id,
+                transaction_request,
+                &packages.iter().collect::<Vec<_>>(),
+                self.verbose,
+                self.trace_kinds,
+            )
+            .await;
+        }
+
+        if self.dry_run {
+            return dry_run_transaction(&client, account_id, transaction_request).await;
         }
 
         execute_transaction(
@@ -607,8 +686,57 @@ async fn resolve_input_note<AUTH: Keystore + Sync>(
     })
 }
 
+/// Reads a note from `path`: a serialized [`Note`], or a [`NoteFile::Committed`] whose proof is
+/// dropped. No other note file holds a whole note: an `ExpectedNote` has no metadata (sender).
+fn read_note_file(path: &Path) -> Result<Note, CliError> {
+    let bytes = fs::read(path)?;
+    if let Ok(note) = Note::read_from_bytes(&bytes) {
+        return Ok(note);
+    }
+    match NoteFile::try_from_bytes(&bytes) {
+        Ok(NoteFile::Committed { note, .. }) => Ok(note),
+        Ok(_) => Err(CliError::Input(format!(
+            "{} is a note file without the whole note; pass a serialized note or a committed \
+             note file",
+            path.display()
+        ))),
+        Err(err) => Err(CliError::Input(format!(
+            "{} is neither a serialized note nor a note file: {err}",
+            path.display()
+        ))),
+    }
+}
+
 // EXECUTE TRANSACTION
 // ================================================================================================
+
+/// Executes the transaction and prints its effects, without proving, submitting or changing the
+/// store.
+async fn dry_run_transaction<AUTH: Keystore + Sync + 'static>(
+    client: &Client<AUTH>,
+    account_id: AccountId,
+    transaction_request: TransactionRequest,
+) -> Result<(), CliError> {
+    let transaction_result = client.execute_transaction(account_id, transaction_request).await?;
+    print_executed_transaction(client, transaction_result.executed_transaction()).await
+}
+
+/// [`dry_run_transaction`] with the recording executor: prints the call tree of the whole
+/// transaction, then its effects. A failed execution still prints its trace.
+#[cfg(feature = "trace")]
+async fn trace_transaction<AUTH: Keystore + Sync + 'static>(
+    client: &Client<AUTH>,
+    account_id: AccountId,
+    transaction_request: TransactionRequest,
+    packages: &[&miden_client::vm::Package],
+    verbose: u8,
+    kinds: bool,
+) -> Result<(), CliError> {
+    let (outcome, replay) =
+        client.execute_transaction_with_trace(account_id, transaction_request, packages).await;
+    print_call_trace(replay.as_ref(), packages, None, verbose, kinds);
+    print_executed_transaction(client, outcome?.executed_transaction()).await
+}
 
 async fn execute_transaction<AUTH: Keystore + Sync + 'static>(
     client: &mut Client<AUTH>,

@@ -1,4 +1,5 @@
-//! Prints the call tree that `call --trace` records, filtered by `--verbose`.
+//! Prints the call tree that `call --trace` and `consume-notes --trace` record, filtered by
+//! `--verbose`.
 
 use miden_client::assembly::Path;
 use miden_client::transaction::trace::{CallFrameRecord, CallTraceReplay, TracedArg};
@@ -52,10 +53,11 @@ impl FrameKind {
 }
 
 /// Prints the call tree of the replayed run, under the result of the real run. With `kinds`, each
-/// frame starts with its [`FrameKind`] tag.
+/// frame starts with its [`FrameKind`] tag. `packages` are the ones whose debug info names the
+/// frames, and `entry` the procedure the user called, if the run has a single one.
 pub fn print_call_trace(
     replay: Option<&CallTraceReplay>,
-    package: Option<&Package>,
+    packages: &[&Package],
     entry: Option<&EntryCall<'_>>,
     verbose: u8,
     kinds: bool,
@@ -71,9 +73,10 @@ pub fn print_call_trace(
     }
 
     // Without a package no frame has a name, so there is nothing to filter on.
-    let max_kind = match package {
-        Some(_) => FrameKind::shown_at(verbose),
-        None => FrameKind::Internal,
+    let max_kind = if packages.is_empty() {
+        FrameKind::Internal
+    } else {
+        FrameKind::shown_at(verbose)
     };
 
     let mut printer = Printer {

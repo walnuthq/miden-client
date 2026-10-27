@@ -375,7 +375,7 @@ async fn execute_and_print_call<AUTH: Keystore + Sync + 'static>(
         let entry = output.entry.map(|(name, args)| EntryCall { name, args, result });
         print_call_trace(
             replay.as_ref(),
-            output.package,
+            output.package.as_slice(),
             entry.as_ref(),
             trace.verbose,
             trace.kinds,
