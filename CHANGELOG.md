@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1 (TBD)
+
+### Features
+
+* [FEATURE][rust] The transaction executor logs the messages of `miden::println!` with the `miden::println` `tracing` target. Before, the transaction host ignored the event.
+
 ## 0.18.0 (2026-10-27)
 
 ### Breaking Changes

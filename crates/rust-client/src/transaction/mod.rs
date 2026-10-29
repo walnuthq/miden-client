@@ -96,6 +96,7 @@ use miden_standards::account::faucets::FungibleFaucet;
 use miden_standards::account::interface::AccountComponentInterfaceExt;
 use miden_standards::note::TxFeeNote;
 use miden_tx::{DataStore, NoteConsumptionChecker, TransactionExecutor};
+use println_executor::PrintlnProgramExecutor;
 use tracing::info;
 
 use super::Client;
@@ -127,6 +128,7 @@ pub use chain_anchor::{ChainAnchor, ChainAnchorError};
 
 #[cfg(feature = "dap")]
 mod dap_executor;
+mod println_executor;
 mod prover;
 pub use prover::TransactionProver;
 
@@ -1313,12 +1315,16 @@ where
     }
 
     /// Creates a transaction executor configured with the client's runtime options, authenticator,
-    /// and source manager.
+    /// and source manager. The executor logs the messages of `miden::println!`.
     pub(crate) fn build_executor<'store, 'auth, STORE: DataStore + Sync>(
         &'auth self,
         data_store: &'store STORE,
-    ) -> Result<TransactionExecutor<'store, 'auth, STORE, AUTH>, TransactionExecutorError> {
+    ) -> Result<
+        TransactionExecutor<'store, 'auth, STORE, AUTH, PrintlnProgramExecutor>,
+        TransactionExecutorError,
+    > {
         let mut executor = TransactionExecutor::new(data_store)
+            .with_program_executor::<PrintlnProgramExecutor>()
             .with_options(self.exec_options)?
             .with_source_manager(self.source_manager.clone());
         if let Some(authenticator) = self.authenticator.as_deref() {
